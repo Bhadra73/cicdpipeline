@@ -1,88 +1,101 @@
 pipeline {
     agent any
 
-
-       tools {
+    tools {
         maven 'maven'
     }
 
+    environment {
+        SONAR_TOKEN = credentials('sonar')
+    }
+
     stages {
-		  stage('checkout') {
-				steps {
-					echo 'Cloning GIT HUB Repo '
-					git branch: 'main', url: 'https://github.com/sathish-katakam/cicdpipeline'
-				}  
-			}
-        
-			 stage('sonar') {
-				steps {
-					echo 'scanning project'
-					sh 'ls -ltr'
-					
-					sh ''' mvn sonar:sonar \\
-						  -Dsonar.host.url=http://localhost:9000 \\
-						  -Dsonar.login=squ_0b322659f788bc5343afb8a48b764416db2400fe'''
-				}
-			}
-		        stage('Build Artifact') {
+
+        stage('Checkout') {
             steps {
-                echo 'Build Artifact'
-				sh 'mvn clean package'
+
+                echo 'Cloning GitHub Repo'
+
+                git branch: 'main',
+                url: 'https://github.com/sumapalla/CI-CD.git'
             }
         }
-	
-	stage('Docker Image') {
+
+        stage('SonarQube Analysis') {
             steps {
-                echo 'Docker Image building'
-				sh 'docker build -t sathishkatakam/devops:${BUILD_NUMBER} .'
+
+                echo 'Scanning Project'
+
+                sh 'ls -ltr'
+
+                sh """
+                    mvn sonar:sonar \
+                    -Dsonar.host.url=http://localhost:9000 \
+                    -Dsonar.token=$SONAR_TOKEN
+                """
             }
         }
-		
-		
-       stage('Push to Dockerhub') {
+
+        stage('Build Artifact') {
             steps {
-			 script {
-			withCredentials([string(credentialsId: 'dockerhub', variable: 'dockerhub')]) 
-			{
-            sh 'docker login -u sathishkatakam -p ${dockerhub}'
-			
-			 }
-			   sh 'docker push sathishkatakam/devops:${BUILD_NUMBER}'
-			   
-           
-				}
-				
+
+                echo 'Building Artifact'
+
+                sh 'mvn clean package'
             }
         }
-        
-       stage('Update Deployment File') {
+
+        stage('Docker Image Build') {
+            steps {
+
+                echo 'Building Docker Image'
+
+                sh 'docker build -t katakamsuma/myapp:${BUILD_NUMBER} .'
+            }
+        }
+
+        stage('Push to DockerHub') {
+            steps {
+
+                echo 'Pushing Docker Image'
+
+                script {
+
+                    withCredentials([string(credentialsId: 'docker', variable: 'dockerhub')]) {
+
+                        sh 'docker login -u katakamsuma -p ${dockerhub}'
+
+                        sh 'docker push katakamsuma/myapp:${BUILD_NUMBER}'
+                    }
+                }
+            }
+        }
+        stage('Update Deployment File') {
 		
 		 environment {
-            GIT_REPO_NAME = "cicdpipeline"
-            GIT_USER_NAME = "sathish-katakam"
+            GIT_REPO_NAME = "mindcircuit13"
+            GIT_USER_NAME = "devopstraininghub"
         }
 		
             steps {
                 echo 'Update Deployment File'
 				withCredentials([string(credentialsId: 'githubtoken', variable: 'githubtoken')]) 
 				{
-                 sh '''
-                    git config user.email "sathish.katakam@gmail.com"
-                    git config user.name "Sathish"
+                  sh '''
+                    git config user.email "gorekarmadhu@gmail.com"
+                    git config user.name "Madhu"
                     BUILD_NUMBER=${BUILD_NUMBER}
-                    sed -i "s/devops:.*/devops:${BUILD_NUMBER}/g" deploymentfiles/deployment.yml
+                    sed -i "s/myapp:.*/myapp:${BUILD_NUMBER}/g" deploymentfiles/deployment.yml
                     git add .
+                    
                     git commit -m "Update deployment image to version ${BUILD_NUMBER}"
-                    git push https://${githubtoken}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
-                
 
+                    git push https://${githubtoken}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
                 '''
 				  
                  }
 				
             }
         }
-		
-	
-	}
+    }
 }
